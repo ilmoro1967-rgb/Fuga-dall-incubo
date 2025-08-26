@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <title>Fuga dall'incubo - PWA Edition (Migliorato)</title>
 <meta name="theme-color" content="#f00">
+
+<link rel="manifest" href="manifest.json">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/sw.js').then(function(registration) {
+        console.log('Service Worker registration successful with scope: ', registration.scope);
+      }, function(err) {
+        console.log('Service Worker registration failed: ', err);
+      });
+    });
+  }
+</script>
+
 <style>
 html,body{margin:0;padding:0;overflow:hidden;background:#000;height:100%;user-select:none}
 canvas{display:block; width:100vw;
@@ -1215,4 +1229,3 @@ loadSettings();
 </script>
 </body>
 </html>
-
