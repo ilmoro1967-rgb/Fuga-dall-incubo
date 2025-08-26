@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Fuga dall'incubo - PWA Edition (Migliorato)</title>
+<meta name="theme-color" content="#f00">
+<style>
+html,body{margin:0;padding:0;overflow:hidden;background:#000;height:100%;user-select:none}
+canvas{display:block; width:100vw;
+height:100vh;}
+#joyLeft,#joyRight{position:fixed;background:rgba(255,255,255,.12);border-radius:20px;touch-action:none;z-index: 10;}
+#joyLeft{width:130px;height:70px;left:15px;bottom:15px}
+#joyRight{width:70px;height:130px;right:15px;bottom:15px}
+#stickLeft,#stickRight{position:absolute;width:40px;height:40px;background:rgba(255,255,255,.6);border-radius:12px;transition:left .1s,top .1s}
+#stickLeft{left:45px;top:15px}#stickRight{left:15px;top:45px}
+button{padding:18px 35px;font-size:26px;color:#fff;background:#555;border:none;border-radius:14px;cursor:pointer;margin-top: 30px;}
+button:active{background:#777}
+#startScreen,#gameOver,#victoryScreen,#settingsMenu,#levelSummary{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,.92);color:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;font-size:26px;z-index: 20;}
+#startScreen h1,#gameOver h1,#victoryScreen h1,#settingsMenu h1,#levelSummary h1{color:#f00;font-size:70px;margin:0 0 10px 0}
+#startScreen p,#levelSummary p { font-size: 16px;
+line-height: 1.2; }
+#dangerIndicator{position:fixed;top:20px;right:20px;font-size:50px;opacity:0;transition:opacity .2s,transform .2s; z-index: 10;}
+#infoPanel{position:fixed;top:20px;left:20px;color:#fff;display:flex;flex-direction:column;align-items:flex-start;font-size:18px;z-index: 10;}
+#healthBar{width:120px;height:13px;background:#444;border:1.5px solid #fff;margin-top:6px;border-radius:8px}
+#healthLevel{height:100%;background:red;transition:width .15s;border-radius:8px 0 0 8px}
+#staminaBar{width:120px;height:13px;background:#444;border:1.5px solid #fff;margin-top:6px;border-radius:8px}
+#staminaLevel{height:100%;background:limegreen;transition:width .15s;border-radius:8px 0 0 8px}
+#keyCount{margin-top:8px}
+#minimap{position:fixed;top:10px;right:10px;width:140px;height:140px;background:rgba(0,0,0,.5);border:2px solid #fff;border-radius:8px;z-index: 10;}
+#loading-message { position: absolute;
+bottom: 10px; font-size: 18px; color: #fff; }
+#settingsMenu label { font-size: 20px; margin-top: 20px; }
+#settingsMenu input[type="range"] { width: 80%; margin-top: 5px;
+}
+.setting-group { display: flex; flex-direction: column; align-items: center; }
+
+.volume-label {
+  font-size: 16px;
+  color: #ccc;
+  margin-top: 5px;
+  font-style: italic;
+user-select: none;
+}
+#levelSummary ul{
+    list-style-type: none;
+    padding: 0;
+    font-size: 20px;
+    text-align: left;
+}
+#levelSummary li {
+    margin: 10px 0;
+}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="joyLeft"><div id="stickLeft"></div></div>
+<div id="joyRight"><div id="stickRight"></div></div>
+
+<div id="startScreen">
+  <h1>Fuga dall'incubo</h1>
+  <p>PWA Edition (Migliorato)</p>
+  <p>Trova la chiave magnetica e l'uscita prima che gli zombie ti raggiungano!</p>
+  <p><b>Istruzioni:</b><br/><br/>
+  <b style="color:#0f0;">Joystick sinistro</b>: Ruota la visuale.<br/>
+  <b style="color:#0f0;">Joystick destro</b>: Muoviti in avanti/indietro.<br/>
+  Spingi in alto per correre!<br/><br/>
+  </p>
+  <button id="startButton" aria-label="Inizia il gioco">INIZIA</button>
+  <button id="settingsButton" aria-label="Apri impostazioni">IMPOSTAZIONI</button>
+  <p id="loading-message" style="display:none;">Caricamento audio e grafica...</p>
+</div>
+
+<div id="dangerIndicator" aria-live="polite" aria-atomic="true" role="alert">💀</div>
+<div id="infoPanel" aria-live="polite" aria-atomic="true">
+  <div id="scoreDisplay">Score: 0</div>
+  <div id="keyCount">Chiavi: 0 / 3</div>
+  <div id="healthBar"><div id="healthLevel"></div></div>
+ 
+ 
+<div id="staminaBar"><div id="staminaLevel"></div></div>
+</div>
+<canvas id="minimap" aria-label="Minimappa del gioco"></canvas>
+
+<div id="gameOver" style="display:none" role="dialog" aria-modal="true">
+  <h1>GAME OVER</h1>
+  <p id="finalScore"></p>
+  <button id="restartButton" aria-label="Ricomincia il gioco">RIFACCIO</button>
+</div>
+
+<div id="victoryScreen" style="display:none" role="dialog" aria-modal="true">
+  <h1>HAI VINTO!</h1>
+  <p id="victoryScore"></p>
+  <button id="victoryRestartButton" aria-label="Gioca ancora">GIOCA ANCORA</button>
+</div>
+
+<div id="levelSummary" style="display:none" role="dialog" aria-modal="true">
+    <h1>Livello Completato!</h1>
+    <ul id="summaryStats">
+        <li>Tempo: </li>
+        <li>Chiavi raccolte: </li>
+        <li>Kit Medici raccolti: </li>
+        <li>Bevande Energetiche raccolte: </li>
+    </ul>
+  
+<button 
+id="continueButton" aria-label="Continua al prossimo livello">CONTINUA</button>
+</div>
+
+<div id="settingsMenu" style="display:none">
+  <h1>IMPOSTAZIONI</h1>
+  <div class="setting-group">
+    <label for="volumeSteps">Volume Passi</label>
+    <input type="range" id="volumeSteps" min="0" max="1" step="0.1" value="0.7" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.7" role="slider">
+    <div class="volume-label" id="volumeStepsLabel">70%</div>
+  </div>
+  <div class="setting-group">
+    <label for="volumeRex">Volume Lamenti Zombie</label>
+    <input type="range" id="volumeRex" min="0" max="1" step="0.1" value="0.5" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.5" role="slider">
+    <div class="volume-label" id="volumeRexLabel">50%</div>
+  </div>
+  <div class="setting-group">
+    <label for="volumeMusic">Volume Musica</label>
+    <input type="range" id="volumeMusic" min="0" max="1" step="0.1" value="1" aria-valuemin="0" aria-valuemax="1" aria-valuenow="1" role="slider">
+  
+<div class="volume-label" id="volumeMusicLabel">100%</div>
+  
+</div>
+  <div class="setting-group">
+    <label for="timeSteps">Ritardo Passi (ms)</label>
+    <input type="range" id="timeSteps" min="50" max="500" step="10" value="250" aria-valuemin="50" aria-valuemax="500" aria-valuenow="250" role="slider">
+    <div class="volume-label" id="timeStepsLabel">250 ms</div>
+  </div>
+  <button id="closeSettings" aria-label="Chiudi impostazioni">CHIUDI</button>
+</div>
+
+<audio id="backgroundMusic" src="music.mp3" loop></audio>
+
+<script>
+/* === VAR GLOBALI E COSTANTI === */
+const audioCtx = new (window.AudioContext ||
+window.webkitAudioContext)();
+const audioBuffers = {};
+const SFX_FILES = {
+  step: 'step.mp3',
+  key: 'key.mp3',
+  roar: 'roar.mp3',
+  win: 'win.mp3',
+  gameOver: 'gameOver.mp3',
+  rexStep: 'rexStep.mp3',
+  pickup: 'pickup.mp3',
+  neon: 'neon_buzz.mp3'
+};
+const IMG_FILES = {
+  rex: 'zombie.png',
+  key: 'key.png',
+  door: 'exit_door.png',
+  wall: 'shelf_wall.png',
+  extensionWall: 'extension_wall.png',
+  medkit: 'medkit.png',
+  energydrink: 'energydrink.png',
+  blood1: 'blood1.png',
+  blood2: 'blood2.png',
+  blood3: 'blood3.png'
+};
+const rexTex = new Image();
+rexTex.src = IMG_FILES.rex;
+const keyTex = new Image();
+keyTex.src = IMG_FILES.key;
+const doorTex = new Image();
+doorTex.src = IMG_FILES.door;
+const wallTex = new Image();
+wallTex.src = IMG_FILES.wall;
+const extensionWallTex = new Image();
+extensionWallTex.src = IMG_FILES.extensionWall;
+const medkitTex = new Image();
+medkitTex.src = IMG_FILES.medkit;
+const energydrinkTex = new Image();
+energydrinkTex.src = IMG_FILES.energydrink;
+
+// Variabili per il movimento e la collisione
+const ROT_SPEED = 0.03;
+const SPEED = 0.025;
+const SPRINT_SPEED = 0.045;
+const PLAYER_RADIUS = 0.2; // Questa è la riga che devi modificare per vedere l'effetto!
+const ZOMBIE_SIZE = 1.0;
+const ZOMBIE_ASPECT_RATIO = 0.5;
+let gameRunning = false;
+let stepSoundSource = null;
+let particleSystem;
+let loopId;
+let lastUpdate = 0;
+let lastPickupTime = 0;
+const PICKUP_COOLDOWN = 0;
+const fixedTimeStep = 1000 / 75;
+
+const FOV = Math.PI / 3;
+
+let gameState = { currentLevel: 0 };
+let settings = {
+  volumeSteps: 0.7,
+  volumeRex: 0.5,
+  volumeMusic: 1,
+  timeSteps: 250
+};
+const difficultyLevels = [
+  { numZombies: 2, zombieSpeed: 0.01, numKeys: 1, mapSize: 15, numMedkits: 1, numEnergyDrinks: 1, numNeons: 1 },
+  { numZombies: 4, zombieSpeed: 0.015, numKeys: 2, mapSize: 18, numMedkits: 1, numEnergyDrinks: 1, numNeons: 2 },
+  { numZombies: 6, zombieSpeed: 0.02, numKeys: 3, mapSize: 21, numMedkits: 2, numEnergyDrinks: 2, numNeons: 3 },
+  { numZombies: 8, zombieSpeed: 0.025, numKeys: 4, mapSize: 24, numMedkits: 2, numEnergyDrinks: 2, numNeons: 4 },
+  { numZombies: 10, zombieSpeed: 0.03, numKeys: 5, mapSize: 27, numMedkits: 3, numEnergyDrinks: 3, numNeons: 5 }
+];
+let neonLightEffect = { isFlashing: false, startTime: 0, duration: 300 };
+// NUOVA VARIABILE PER L'EFFETTO NEON
+/* === CARICAMENTO AUDIO === */
+async function loadAudio(name, url) {
+  try {
+    const response = await fetch(url);
+if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    audioBuffers[name] = await audioCtx.decodeAudioData(arrayBuffer);
+} catch (e) {
+    console.error(`Errore caricamento audio ${url}:`, e);
+  }
+}
+
+async function loadAllAssets() {
+  document.getElementById('loading-message').style.display = 'block';
+const audioPromises = Object.entries(SFX_FILES).map(([name, url]) => loadAudio(name, url));
+  const imagePromises = Object.values(IMG_FILES).map(url =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () => reject(`Errore caricamento immagine ${url}`);
+      img.src = url;
+    })
+  );
+await Promise.all([...audioPromises, ...imagePromises]);
+  document.getElementById('loading-message').style.display = 'none';
+  console.log("Tutti gli audio e le immagini sono stati caricati");
+}
+
+/* === GESTIONE SUONI === */
+function playSound(name, volume = 1) {
+  if(!gameRunning) return;
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+const buffer = audioBuffers[name];
+  if (!buffer) {
+    console.warn(`Buffer per suono ${name} non caricato`);
+    return;
+}
+  const source = audioCtx.createBufferSource();
+  const gainNode = audioCtx.createGain();
+  source.buffer = buffer;
+  gainNode.gain.value = volume;
+  source.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  source.start(0);
+if(name === 'step'){
+    stepSoundSource = source;
+    source.onended = () => { stepSoundSource = null; };
+}
+}
+function stopAllSounds(){
+  if(stepSoundSource){
+    stepSoundSource.stop();
+    stepSoundSource = null;
+  }
+  backgroundMusic.pause();
+  backgroundMusic.currentTime = 0;
+}
+
+
+/* === PARTICLE SYSTEM MIGLIORATO CON GRADIENTI === */
+class ParticleSystem {
+  constructor(){ this.particles = [];
+}
+  addParticle(x,y,vx,vy,life,color,size=2){
+    this.particles.push({x,y,vx,vy,life,maxLife:life,color,size,alpha:1});
+  }
+  update(){
+    for(let i=this.particles.length-1;i>=0;i--){
+      const p = this.particles[i];
+p.x += p.vx;
+      p.y += p.vy; 
+      p.life--; 
+      p.alpha = p.life / p.maxLife; 
+      p.vy += 0.02;
+      if(p.life <= 0) this.particles.splice(i,1);
+}
+  }
+  render(ctx){
+    ctx.save();
+    this.particles.forEach(p=>{
+      const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size*2);
+      grad.addColorStop(0, p.color);
+      grad.addColorStop(1, `rgba(0,0,0,0)`);
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+ctx.restore();
+  }
+  addKeySparkles(x,y){
+    for(let i=0; i<5; i++){
+      this.addParticle(x+(Math.random()-0.5)*20, y+(Math.random()-0.5)*20,
+        (Math.random()-0.5)*2, (Math.random()-0.5)*2,
+        30+Math.random()*20,
+        `hsl(${45+Math.random()*15}, 100%, ${70+Math.random()*20}%)`,
+        2+Math.random()*3
+      );
+}
+  }
+  addRexDust(x,y){
+    for(let i=0; i<3; i++){
+      this.addParticle(x+(Math.random()-0.5)*15, y+Math.random()*10,
+        (Math.random()-0.5)*1.5, -Math.random()*2,
+        40+Math.random()*30,
+        `rgba(${100+Math.random()*50}, ${80+Math.random()*40}, ${60+Math.random()*30}, 0.8)`,
+        3+Math.random()*3);
+}
+  }
+  addPlayerStep(x,y){
+    this.addParticle(x+(Math.random()-0.5)*8, y+Math.random()*5,
+      (Math.random()-0.5)*0.5, -Math.random()*1,
+      15+Math.random()*10, `rgba(200,200,200,0.6)`, 1+Math.random());
+}
+  addPickupEffect(x,y, color){
+    for(let i=0; i<8; i++){
+      this.addParticle(x,y,
+        (Math.random()-0.5)*5, (Math.random()-0.5)*5,
+        30+Math.random()*20, color,
+        2+Math.random()
+      );
+}
+  }
+}
+
+/* === UTILI === */
+function makeTex(size, fn){
+  const cv = document.createElement('canvas');
+  cv.width = size;
+  cv.height = size;
+const cx = cv.getContext('2d');
+  for(let y=0; y<size; y++)for(let x=0; x<size; x++) fn(cx,x,y);
+  return cv;
+}
+
+/* === ELEMENTI DOM === */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const minimap = document.getElementById("minimap");
+const mmc = minimap.getContext("2d");
+const gameOverDiv = document.getElementById("gameOver");
+const victoryScreen = document.getElementById("victoryScreen");
+const startScreen = document.getElementById("startScreen");
+const levelSummaryScreen = document.getElementById("levelSummary");
+const continueButton = document.getElementById("continueButton");
+const summaryStats = document.getElementById("summaryStats").getElementsByTagName("li");
+const dangerIndicator = document.getElementById("dangerIndicator");
+const scoreDisplay = document.getElementById("scoreDisplay");
+const keyCountDisplay = document.getElementById("keyCount");
+const finalScoreText = document.getElementById("finalScore");
+const victoryScoreText = document.getElementById("victoryScore");
+const staminaLevel = document.getElementById("staminaLevel");
+const healthLevel = document.getElementById("healthLevel");
+const startButton = document.getElementById("startButton");
+const restartButton = document.getElementById("restartButton");
+const victoryRestartButton = document.getElementById("victoryRestartButton");
+const backgroundMusic = document.getElementById("backgroundMusic");
+const loadingMessage = document.getElementById("loading-message");
+const infoPanel = document.getElementById("infoPanel");
+const volumeStepsLabel = document.getElementById("volumeStepsLabel");
+const volumeRexLabel = document.getElementById("volumeRexLabel");
+const volumeMusicLabel = document.getElementById("volumeMusicLabel");
+const timeStepsLabel = document.getElementById("timeStepsLabel");
+// Menu settings
+const settingsMenu = document.getElementById("settingsMenu");
+const settingsButton = document.getElementById("settingsButton");
+const closeSettingsButton = document.getElementById("closeSettings");
+const volumeStepsSlider = document.getElementById("volumeSteps");
+const volumeRexSlider = document.getElementById("volumeRex");
+const volumeMusicSlider = document.getElementById("volumeMusic");
+const timeStepsSlider = document.getElementById("timeSteps");
+/* === FUNZIONE HI-DPI PER RESIZE === */
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.scale(dpr, dpr);
+
+  minimap.width = 140 * dpr;
+  minimap.height = 140 * dpr;
+minimap.style.width = '140px';
+  minimap.style.height = '140px';
+  mmc.setTransform(1, 0, 0, 1, 0, 0);
+  mmc.scale(dpr, dpr);
+}
+
+/* === GENERAZIONE MAPPA A GRIGLIA === */
+function generateGridMap(size) {
+  const m = Array.from({length: size}, () => Array(size).fill(0));
+for (let y = 2; y < size - 2; y += 2) {
+    for (let x = 2; x < size - 2; x += 2) {
+      m[y][x] = 1;
+const neighbors = [];
+      if (y > 1) neighbors.push({x: x, y: y-1});
+      if (y < size-2) neighbors.push({x: x, y: y+1});
+if (x > 1) neighbors.push({x: x-1, y: y});
+      if (x < size-2) neighbors.push({x: x+1, y: y});
+if (neighbors.length > 0) {
+        const {x: nx, y: ny} = neighbors[Math.floor(Math.random() * neighbors.length)];
+m[ny][nx] = 1;
+      }
+    }
+  }
+  for(let i=0; i<size; i++){
+    m[0][i] = 2;
+m[size-1][i] = 2;
+    m[i][0] = 2;
+    m[i][size-1] = 2;
+  }
+  return m;
+}
+
+// NUOVA FUNZIONE PER TROVARE SOLO LE CELLE RAGGIUNGIBILI
+function getReachableTiles(map, startX, startY) {
+    const mapW = map[0].length;
+const mapH = map.length;
+    const visited = new Set();
+    const queue = [{x: Math.floor(startX), y: Math.floor(startY)}];
+    const reachable = [];
+visited.add(`${queue[0].x},${queue[0].y}`);
+
+    while(queue.length > 0) {
+        const {x, y} = queue.shift();
+        reachable.push({x, y});
+const neighbors = [
+            {dx: 1, dy: 0}, {dx: -1, dy: 0},
+            {dx: 0, dy: 1}, {dx: 0, dy: -1}
+        ];
+for(const {dx, dy} of neighbors) {
+            const nextX = x + dx;
+const nextY = y + dy;
+            const key = `${nextX},${nextY}`;
+if(nextX >= 0 && nextX < mapW && nextY >= 0 && nextY < mapH &&
+               map[nextY][nextX] === 0 && !visited.has(key)) {
+                visited.add(key);
+queue.push({x: nextX, y: nextY});
+            }
+        }
+    }
+    return reachable;
+}
+
+function findExit(map) {
+  for(let y=0; y<map.length; y++){
+    for(let x=0; x<map.length; x++){
+      if(map[y][x] === 4)
+        return {x: x+0.5, y: y+0.5};
+}
+  }
+  return null;
+}
+
+/* === INIZIO GIOCO CON GESTIONE OTTIMIZZATA === */
+async function startGame() {
+  gameRunning = true;
+resize();
+  await loadAllAssets();
+  
+  const currentDifficulty = difficultyLevels[gameState.currentLevel];
+  const NUM_ZOMBIES = currentDifficulty.numZombies;
+  const ZOMBIE_SPEED = currentDifficulty.zombieSpeed;
+  const TOTAL_KEYS = currentDifficulty.numKeys;
+const MAP_SIZE = currentDifficulty.mapSize;
+  const NUM_MEDKITS = currentDifficulty.numMedkits;
+  const NUM_ENERGYDRINKS = currentDifficulty.numEnergyDrinks;
+  const NUM_NEONS = currentDifficulty.numNeons;
+// NUOVA COSTANTE
+
+  gameState.map = generateGridMap(MAP_SIZE);
+  gameState.mapW = gameState.map.length;
+  gameState.mapH = gameState.map.length;
+const p = getReachableTiles(gameState.map, 1.5, 1.5).find(tile => gameState.map[tile.y][tile.x] === 0);
+gameState.player = {
+    x: p.x + 0.5, y: p.y + 0.5, angle: -Math.PI/2, speed: SPEED, stamina: 100, health: 100,
+    isSprinting: false, lastStaminaUseTime: 0, lastStepTime: 0
+  };
+const reachableTiles = getReachableTiles(gameState.map, gameState.player.x, gameState.player.y);
+  
+  // Posiziona l'uscita in un punto raggiungibile
+  let exitTile;
+do {
+      exitTile = reachableTiles[Math.floor(Math.random() * reachableTiles.length)];
+} while(Math.hypot(exitTile.x + 0.5 - gameState.player.x, exitTile.y + 0.5 - gameState.player.y) < 5);
+  gameState.map[exitTile.y][exitTile.x] = 4;
+  
+  gameState.zombies = [];
+for(let i = 0; i < NUM_ZOMBIES; i++){
+    let zombiePos;
+do {
+      zombiePos = reachableTiles[Math.floor(Math.random() * reachableTiles.length)];
+} while (Math.hypot(zombiePos.x + 0.5 - gameState.player.x, zombiePos.y + 0.5 - gameState.player.y) < 5);
+gameState.zombies.push({
+      x: zombiePos.x + 0.5, y: zombiePos.y + 0.5, angle: Math.random()*Math.PI*2, speed: ZOMBIE_SPEED,
+      lastStepTime: 0, lastRoarTime: 0, state: 'wandering', turnCooldown: Math.floor(Math.random()*100)+50
+    });
+}
+
+  gameState.keys = [];
+  while(gameState.keys.length < TOTAL_KEYS) {
+    const k = reachableTiles[Math.floor(Math.random() * reachableTiles.length)];
+if(k && Math.hypot(k.x + 0.5 - gameState.player.x, k.y + 0.5 - gameState.player.y) >= 2) gameState.keys.push({x: k.x + 0.5, y: k.y + 0.5});
+}
+
+  gameState.medkits = [];
+  while(gameState.medkits.length < NUM_MEDKITS) {
+      const m = reachableTiles[Math.floor(Math.random() * reachableTiles.length)];
+if(m) gameState.medkits.push({x: m.x + 0.5, y: m.y + 0.5});
+  }
+
+  gameState.energyDrinks = [];
+while(gameState.energyDrinks.length < NUM_ENERGYDRINKS) {
+      const e = reachableTiles[Math.floor(Math.random() * reachableTiles.length)];
+if(e) gameState.energyDrinks.push({x: e.x + 0.5, y: e.y + 0.5});
+  }
+
+  // NUOVA LOGICA: Posiziona gli oggetti neon
+  gameState.neons = [];
+while(gameState.neons.length < NUM_NEONS) {
+    const n = reachableTiles[Math.floor(Math.random() * reachableTiles.length)];
+// Assicurati di non posizionare il neon sulla stessa cella dell'uscita
+    if (n && gameState.map[n.y][n.x] !== 4) {
+      gameState.map[n.y][n.x] = 5;
+// Assegna il tipo 5 per il neon
+      gameState.neons.push({ x: n.x + 0.5, y: n.y + 0.5 });
+}
+  }
+
+  gameState.keysCollected = 0;
+  gameState.medkitsCollected = 0;
+  gameState.energyDrinksCollected = 0;
+  gameState.score = 0;
+  gameState.startTime = Date.now();
+particleSystem = new ParticleSystem();
+  gameOverDiv.style.display = "none";
+  victoryScreen.style.display = "none";
+  startScreen.style.display = "none";
+  levelSummaryScreen.style.display = "none";
+  settingsMenu.style.display = "none";
+dangerIndicator.style.opacity = 0;
+  scoreDisplay.innerText = "Score: 0";
+  keyCountDisplay.innerText = `Chiavi: ${gameState.keysCollected} / ${difficultyLevels[gameState.currentLevel].numKeys}`;
+  staminaLevel.style.width = "100%";
+  healthLevel.style.width = "100%";
+infoPanel.style.display = 'flex';
+  try {
+    backgroundMusic.volume = settings.volumeMusic;
+    await backgroundMusic.play();
+} catch(e) {
+    console.error("Errore riproduzione musica di sottofondo:", e);
+  }
+  if(loopId) cancelAnimationFrame(loopId);
+  lastUpdate = 0;
+loopId = requestAnimationFrame(loop);
+}
+
+/* === FINE PARTITA === */
+function gameOver() {
+  gameRunning = false;
+  cancelAnimationFrame(loopId);
+  infoPanel.style.display = 'none';
+const finalScore = Math.floor((Date.now() - gameState.startTime) / 80);
+  finalScoreText.innerText = "Punteggio finale: " + finalScore;
+try {
+    backgroundMusic.pause();
+    backgroundMusic.currentTime = 0;
+    stopAllSounds();
+    playSound('gameOver');
+} catch(e) {
+    console.error("Errore GAME OVER:", e);
+  }
+  gameOverDiv.style.display = "flex";
+}
+
+/* === VITTORIA === */
+function victory() {
+  gameRunning = false;
+  cancelAnimationFrame(loopId);
+  infoPanel.style.display = 'none';
+try {
+    stopAllSounds();
+    playSound('win');
+  } catch(e) {
+    console.error("Errore VITTORIA:", e);
+}
+  
+  if (gameState.currentLevel < difficultyLevels.length - 1) {
+    showLevelSummary();
+} else {
+    const finalScore = Math.floor((Date.now() - gameState.startTime) / 80);
+victoryScoreText.innerText = "Punteggio finale: " + finalScore;
+    victoryScreen.style.display = "flex";
+for(let i=0; i<50; i++){
+      setTimeout(()=>{
+        particleSystem.addParticle(
+          Math.random() * canvas.width,
+          Math.random() * canvas.height * 0.3,
+          (Math.random() - 0.5) * 10,
+          Math.random() * 5,
+          100 + Math.random() * 50,
+     
+          `hsl(${Math.random() * 60 + 30}, 100%, ${60 + Math.random() * 30}%)`,
+          4 + Math.random() * 6
+        );
+      }, i*50);
+}
+  }
+}
+
+function showLevelSummary() {
+    const levelTime = (Date.now() - gameState.startTime) / 1000;
+summaryStats[0].textContent = `Tempo: ${levelTime.toFixed(1)} s`;
+    summaryStats[1].textContent = `Chiavi raccolte: ${gameState.keysCollected}`;
+    summaryStats[2].textContent = `Kit Medici raccolti: ${gameState.medkitsCollected}`;
+summaryStats[3].textContent = `Bevande Energetiche raccolte: ${gameState.energyDrinksCollected}`;
+    levelSummaryScreen.style.display = 'flex';
+}
+
+/* === JOYSTICK & INPUT === */
+const joyLeftEl = document.getElementById("joyLeft");
+const stickLeftEl = document.getElementById("stickLeft");
+const joyRightEl = document.getElementById("joyRight");
+const stickRightEl = document.getElementById("stickRight");
+
+let joyLeft = { x: 0 };
+const joyRight = { y: 0 };
+addEventListener('pointerdown', () => {
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+}, { once: true });
+function clamp01(n){ return Math.max(-1, Math.min(1, n));
+}
+
+function setupJoystick(zoneEl, stickEl, orientation, onChange) {
+  let activePointerId = null;
+function updateFrom(cx, cy){
+    const rect = zoneEl.getBoundingClientRect();
+    let nx = (cx - (rect.left + rect.width/2)) / (rect.width/2);
+let ny = (cy - (rect.top + rect.height/2)) / (rect.height/2);
+    nx = clamp01(nx);
+    ny = clamp01(ny);
+if(orientation === "horizontal"){
+      stickEl.style.left = `${45 + nx * 45}px`;
+      onChange(nx, 0);
+} else {
+      stickEl.style.top = `${45 + ny * 45}px`;
+      onChange(0, -ny);
+}
+  }
+  function reset(){
+    if(activePointerId !== null){
+      try{ zoneEl.releasePointerCapture(activePointerId);
+} catch(e){}
+    }
+    activePointerId = null;
+if(orientation === "horizontal"){
+      stickEl.style.left = '45px';
+      onChange(0, 0);
+} else {
+      stickEl.style.top = '45px';
+      onChange(0, 0);
+}
+  }
+  zoneEl.addEventListener("pointerdown", e => {
+    if(activePointerId !== null) return;
+    activePointerId = e.pointerId;
+    zoneEl.setPointerCapture(activePointerId);
+    e.preventDefault();
+    updateFrom(e.clientX, e.clientY);
+  }, {passive:false});
+zoneEl.addEventListener("pointermove", e => {
+    if(e.pointerId !== activePointerId) return;
+    e.preventDefault();
+    updateFrom(e.clientX, e.clientY);
+  }, {passive:false});
+zoneEl.addEventListener("pointerup", e => {
+    if(e.pointerId !== activePointerId) return;
+    e.preventDefault();
+    reset();
+  }, {passive:false});
+zoneEl.addEventListener("pointercancel", e => {
+    if(e.pointerId !== activePointerId) return;
+    e.preventDefault();
+    reset();
+  });
+}
+
+setupJoystick(joyLeftEl, stickLeftEl, 'horizontal', x => { joyLeft.x = x; });
+setupJoystick(joyRightEl, stickRightEl, 'vertical', (_, y) => {
+  joyRight.y = y;
+  if(gameState && gameState.player) gameState.player.isSprinting = (y > 0.7);
+});
+// Tastiera desktop per debug
+addEventListener("keydown", e => {
+  if(!gameRunning) return;
+  switch(e.key){
+    case "ArrowLeft": case "a": joyLeft.x = -1; break;
+    case "ArrowRight": case "d": joyLeft.x = 1; break;
+    case "ArrowUp": case "w": joyRight.y = 1; break;
+    case "ArrowDown": case "s": joyRight.y = -1; break;
+    case "Shift":
+      if(gameState && gameState.player) gameState.player.isSprinting = true;
+      break;
+  }
+});
+addEventListener("keyup", e => {
+  if(!gameRunning) return;
+  switch(e.key){
+    case "ArrowLeft": case "a": case "ArrowRight": case "d": joyLeft.x = 0; break;
+    case "ArrowUp": case "w": case "ArrowDown": case "s": joyRight.y = 0; break;
+    case "Shift":
+      if(gameState && gameState.player) gameState.player.isSprinting = false;
+      break;
+  }
+});
+/* === FUNZIONE PER CONTROLLARE SE MURO === */
+function isWall(x, y) {
+  const cell = gameState.map[Math.floor(y)]?.[Math.floor(x)];
+return cell === 1 || cell === 2;
+}
+
+/* === LOOP DI GIOCO CON ACCUMULATORE PER STABILITA' === */
+let accumulator = 0;
+function loop(timestamp) {
+  if (!gameRunning) return;
+  if (!lastUpdate) lastUpdate = timestamp;
+  const delta = timestamp - lastUpdate;
+lastUpdate = timestamp;
+  accumulator += delta;
+
+  while (accumulator >= fixedTimeStep) {
+    update();
+    accumulator -= fixedTimeStep;
+}
+  render();
+  loopId = requestAnimationFrame(loop);
+}
+
+/* === LOGICA E AGGIORNAMENTO DELLA PARTITA === */
+function update(){
+  if(!gameRunning) return;
+const now = Date.now();
+  gameState.score = Math.floor((now - gameState.startTime) / 80);
+  scoreDisplay.innerText = "Score: " + gameState.score;
+const isMoving = joyRight.y !== 0;
+
+  if(!isMoving && stepSoundSource){
+    stepSoundSource.stop();
+    stepSoundSource = null;
+}
+
+  if(gameState.player.isSprinting && gameState.player.stamina > 0){
+    gameState.player.stamina -= 0.4;
+    gameState.player.speed = SPRINT_SPEED;
+    gameState.player.lastStaminaUseTime = now;
+} else {
+    gameState.player.isSprinting = false;
+    gameState.player.speed = SPEED;
+if(gameState.player.stamina < 100 && now - gameState.player.lastStaminaUseTime > 400)
+      gameState.player.stamina += 0.3;
+}
+  gameState.player.stamina = Math.min(100, Math.max(0, gameState.player.stamina));
+  staminaLevel.style.width = `${gameState.player.stamina}%`;
+
+  let currentRotSpeed = ROT_SPEED;
+if(joyRight.y !== 0) currentRotSpeed = ROT_SPEED * 0.5;
+  gameState.player.angle += joyLeft.x * currentRotSpeed;
+const nextPx = gameState.player.x + joyRight.y * Math.cos(gameState.player.angle) * gameState.player.speed;
+  const nextPy = gameState.player.y + joyRight.y * Math.sin(gameState.player.angle) * gameState.player.speed;
+  
+  // LOGICA DI COLLISIONE CORRETTA
+  // Controlla la posizione futura del giocatore, ma con un raggio aggiuntivo
+  const collisionX = gameState.player.x + joyRight.y * Math.cos(gameState.player.angle) * (gameState.player.speed + PLAYER_RADIUS);
+  const collisionY = gameState.player.y + joyRight.y * Math.sin(gameState.player.angle) * (gameState.player.speed + PLAYER_RADIUS);
+  const willCollide = isWall(collisionX, collisionY);
+
+  if(!willCollide){
+    if(isMoving && now - gameState.player.lastStepTime > (gameState.player.isSprinting ? settings.timeSteps * 0.5 : settings.timeSteps) && !stepSoundSource){
+      playSound('step', gameState.player.isSprinting ? settings.volumeSteps * 1.5 : settings.volumeSteps);
+const screenX = canvas.width * 0.5;
+      const screenY = canvas.height * 0.8;
+      particleSystem.addPlayerStep(screenX, screenY);
+      gameState.player.lastStepTime = now;
+}
+    gameState.player.x = nextPx;
+    gameState.player.y = nextPy;
+}
+
+  // Raccogli chiavi
+  gameState.keys.forEach((k, i) => {
+    if(Math.hypot(gameState.player.x - k.x, gameState.player.y - k.y) < 0.5){
+      if (now - lastPickupTime > PICKUP_COOLDOWN) {
+        for(let j=0;j<15;j++){
+          particleSystem.addParticle(
+            canvas.width * 0.5 + (Math.random()-0.5)*100,
+            canvas.height * 0.5 + (Math.random()-0.5)*100,
+            (Math.random()-0.5)*8,
+            (Math.random()-0.5)*8,
+            60 + Math.random()*40,
+       
+          `hsl(${45 + Math.random()*30}, 100%, ${60 + Math.random()*30}%)`,
+            3 + Math.random()*4
+          );
+        }
+        playSound('key');
+        lastPickupTime = now;
+      }
+      gameState.keys.splice(i,1);
+      gameState.keysCollected++;
+      keyCountDisplay.innerText = `Chiavi: ${gameState.keysCollected} / ${difficultyLevels[gameState.currentLevel].numKeys}`;
+    }
+  });
+// Raccogli kit medici
+  gameState.medkits.forEach((k, i) => {
+    if(Math.hypot(gameState.player.x - k.x, gameState.player.y - k.y) < 0.5){
+      if (now - lastPickupTime > PICKUP_COOLDOWN) {
+        gameState.player.health = Math.min(100, gameState.player.health + 40);
+        particleSystem.addPickupEffect(k.x, k.y, 'rgba(0, 255, 0, 0.8)');
+        gameState.medkits.splice(i,1);
+        gameState.medkitsCollected++;
+        playSound('pickup');
+        lastPickupTime = now;
+      }
+    }
+  });
+// Raccogli bevande energetiche
+  gameState.energyDrinks.forEach((k, i) => {
+    if(Math.hypot(gameState.player.x - k.x, gameState.player.y - k.y) < 0.5){
+      if (now - lastPickupTime > PICKUP_COOLDOWN) {
+        gameState.player.stamina = Math.min(100, gameState.player.stamina + 50);
+        particleSystem.addPickupEffect(k.x, k.y, 'rgba(0, 255, 255, 0.8)');
+        gameState.energyDrinks.splice(i,1);
+        gameState.energyDrinksCollected++;
+        playSound('pickup');
+        lastPickupTime = now;
+      }
+    }
+  });
+// NUOVA LOGICA: Controllo per l'effetto e il suono del neon
+  gameState.neons.forEach(neon => {
+    const dx = gameState.player.x - neon.x;
+    const dy = gameState.player.y - neon.y;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist < 5) {
+      const volume = 1 - (dist / 5);
+      playSound('neon', volume);
+      
+      // Attiva l'effetto di luce se non è già attivo
+      if (!neonLightEffect.isFlashing) {
+   
+neonLightEffect.isFlashing = true;
+        neonLightEffect.startTime = Date.now();
+        setTimeout(() => {
+          neonLightEffect.isFlashing = false;
+        }, neonLightEffect.duration);
+      }
+    }
+  });
+// Controlla vittoria
+  if(gameState.keysCollected >= difficultyLevels[gameState.currentLevel].numKeys && gameState.map[Math.floor(gameState.player.y)]?.[Math.floor(gameState.player.x)] === 4){
+    victory();
+    return;
+}
+
+  // Movimento Zombie con ottimizzazione e rumori (ruggito e passi)
+  let nearestZombieDist = Infinity;
+const currentDifficulty = difficultyLevels[gameState.currentLevel];
+  const zombieSpeed = currentDifficulty.zombieSpeed;
+
+  gameState.zombies.forEach(zombie => {
+    const dx = gameState.player.x - zombie.x;
+    const dy = gameState.player.y - zombie.y;
+    const dist = Math.hypot(dx, dy);
+
+    // Calcolo del danno fissa, non aumenta con i livelli
+    if(dist < 0.3) {
+      const baseDamage = 0.5;
+      const totalDamage = baseDamage;
+      gameState.player.health -= totalDamage;
+    }
+    // Aggiorna l'interfaccia
+    healthLevel.style.width = `${Math.max(0, gameState.player.health)}%`;
+ 
+ 
+    // Controlla la fine del gioco
+    if (gameState.player.health <= 0) {
+      gameOver();
+      return;
+    }
+    
+    if(dist < nearestZombieDist) nearestZombieDist = dist;
+
+    if(dist < 4 && now - zombie.lastRoarTime > 4000){
+        const volume = settings.volumeRex * (1 - (dist / 4));
+        if (volume > 0.05) {
+            
+playSound('roar', 
+volume);
+ 
+            zombie.lastRoarTime = now;
+        }
+    }
+    
+    zombie.turnCooldown--;
+    if(zombie.turnCooldown <= 0){
+      const angZombie = Math.atan2(dy, dx);
+zombie.angle = angZombie;
+      zombie.turnCooldown = Math.floor(Math.random()*100) + 50;
+    }
+    const nextZombieX = zombie.x + Math.cos(zombie.angle) * zombieSpeed;
+const nextZombieY = zombie.y + Math.sin(zombie.angle) * zombieSpeed;
+
+    if(isWall(nextZombieX, nextZombieY)) {
+      zombie.angle += Math.PI/2 * (Math.random() < 0.5 ? 1 : -1);
+} else {
+      zombie.x = nextZombieX;
+      zombie.y = nextZombieY;
+    }
+  });
+// Indicatore pericolo in base allo zombie più vicino
+  const dangerLevel = Math.max(0, 1 - nearestZombieDist/8);
+  dangerIndicator.style.opacity = dangerLevel;
+dangerIndicator.style.transform = `scale(${1 + dangerLevel*0.2}) rotate(${Math.sin(Date.now()*0.01)*10}deg)`;
+
+  particleSystem.update();
+}
+
+/* === RENDER DI GIOCO OTTIMIZZATO CON LIMITI DI VISIBILITA' === */
+function render() {
+  // Aggiungi queste righe per definire le variabili necessarie
+  const player = gameState.player;
+const map = gameState.map;
+  const mapW = gameState.mapW;
+  const mapH = gameState.mapH;
+  const w = canvas.width;
+  const h = canvas.height;
+const cols = w; 
+  const stripW = w / cols;
+  
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, w, h);
+// NUOVA LOGICA: Sfondo con pavimento rosso e soffitto con effetto neon
+  // Pavimento rosso semitrasparente
+  ctx.fillStyle = 'rgba(139, 0, 0, 0.4)';
+ctx.fillRect(0, h / 2, w, h / 2);
+
+  // Soffitto con effetto di luce neon
+  let ceilingColor = 'rgb(0, 0, 0)';
+if (neonLightEffect.isFlashing) {
+    const elapsed = Date.now() - neonLightEffect.startTime;
+    const progress = Math.min(1, elapsed / neonLightEffect.duration);
+const alpha = 1 - Math.abs(progress - 0.5) * 2;
+    const newR = Math.min(255, 220 + 35 * alpha);
+const newG = Math.min(255, 220 + 35 * alpha);
+    const newB = Math.min(255, 200 + 55 * alpha);
+ceilingColor = `rgb(${newR}, ${newG}, ${newB})`;
+  }
+  ctx.fillStyle = ceilingColor;
+  ctx.fillRect(0, 0, w, h / 2);
+
+  zBuffer = [];
+for (let col = 0; col < cols; col++) {
+    const ang = (col / cols - 0.5) * FOV + player.angle;
+const rayDirX = Math.cos(ang);
+    const rayDirY = Math.sin(ang);
+    let mapX = Math.floor(player.x);
+    let mapY = Math.floor(player.y);
+const deltaDistX = Math.abs(1 / rayDirX);
+    const deltaDistY = Math.abs(1 / rayDirY);
+
+    let stepX, stepY;
+    let sideDistX, sideDistY;
+if (rayDirX < 0) {
+      stepX = -1;
+      sideDistX = (player.x - mapX) * deltaDistX;
+} else {
+      stepX = 1;
+      sideDistX = (mapX + 1.0 - player.x) * deltaDistX;
+}
+    if (rayDirY < 0) {
+      stepY = -1;
+sideDistY = (player.y - mapY) * deltaDistY;
+    } else {
+      stepY = 1;
+sideDistY = (mapY + 1.0 - player.y) * deltaDistY;
+    }
+
+    let hit = false;
+    let side;
+let perpWallDist;
+
+    while (!hit) {
+      if (sideDistX < sideDistY) {
+        sideDistX += deltaDistX;
+mapX += stepX;
+        side = 0;
+      } else {
+        sideDistY += deltaDistY;
+mapY += stepY;
+        side = 1;
+      }
+
+      if (map[mapY]?.[mapX] === 1 || map[mapY]?.[mapX] === 2 || (map[mapY]?.[mapX] === 4 && gameState.keysCollected >= difficultyLevels[gameState.currentLevel].numKeys)) {
+        hit = true;
+if (side === 0) {
+          perpWallDist = (mapX - player.x + (1 - stepX) / 2) / rayDirX;
+} else {
+          perpWallDist = (mapY - player.y + (1 - stepY) / 2) / rayDirY;
+}
+      }
+    }
+
+    zBuffer[col] = perpWallDist;
+const wallH = h / (perpWallDist + 0.0001);
+    const drawStart = (h - wallH) / 2;
+    let tex = null;
+if (map[mapY]?.[mapX] === 1) tex = wallTex;
+    else if (map[mapY]?.[mapX] === 2) tex = extensionWallTex;
+else if (map[mapY]?.[mapX] === 4) tex = doorTex;
+
+    let wallX;
+if (side === 0) {
+      wallX = player.y + perpWallDist * rayDirY;
+} else {
+      wallX = player.x + perpWallDist * rayDirX;
+}
+    wallX -= Math.floor(wallX);
+
+    const textureX = Math.floor(wallX * tex.width);
+ctx.drawImage(tex, textureX, 0, 1, tex.height, col * stripW, drawStart, stripW, wallH);
+}
+
+  // Sprite: chiavi e zombie con limitazione distanza
+  const MAX_SPRITE_DRAW_DIST = 15;
+const sprites = [
+    ...gameState.keys.map(k => ({x: k.x, y: k.y, texture: keyTex, size: 1})),
+    ...gameState.zombies.map(z => ({x: z.x, y: z.y, texture: rexTex, size: ZOMBIE_SIZE})),
+    ...gameState.medkits.map(m => ({x: m.x, y: m.y, texture: medkitTex, size: 1})),
+    ...gameState.energyDrinks.map(e => ({x: e.x, y: e.y, texture: energydrinkTex, size: 1}))
+  ];
+if(gameState.keysCollected >= difficultyLevels[gameState.currentLevel].numKeys){
+    const exit = findExit(map);
+if(exit)
+      sprites.push({x: exit.x, y: exit.y, texture: doorTex, size: 1.5});
+}
+  sprites.sort((a,b) => Math.hypot(player.x - b.x, player.y - b.y) - Math.hypot(player.x - a.x, player.y - a.y));
+sprites.forEach(sprite => {
+    const dx = sprite.x - player.x;
+    const dy = sprite.y - player.y;
+    let angle = Math.atan2(dy, dx) - player.angle;
+    if(angle > Math.PI) angle -= 2 * Math.PI;
+    if(angle < -Math.PI) angle += 2 * Math.PI;
+
+    const spriteDist = Math.hypot(dx, dy);
+    if(spriteDist > MAX_SPRITE_DRAW_DIST) return;
+    const projectedDist = spriteDist * Math.cos(angle);
+    const spriteScreenSize = Math.min(h, h/(projectedDist + 0.0001));
+
+    const spriteX = w/2 + Math.tan(angle)*w/(2 * Math.tan(FOV/2)) - (spriteScreenSize 
+* sprite.size * ZOMBIE_ASPECT_RATIO)/2;
+    const spriteY = h/2 - spriteScreenSize * sprite.size / 2 + 50; // MODIFICATO QUI
+
+    const start = Math.max(0, Math.floor(spriteX));
+    const end = Math.min(w, Math.floor(spriteX + spriteScreenSize * sprite.size * ZOMBIE_ASPECT_RATIO));
+
+    for(let i = start; i < end; i++){
+      if(projectedDist > 0.5 && projectedDist < zBuffer[i]){
+          const textureX = Math.floor((i-spriteX) / (spriteScreenSize * sprite.size * ZOMBIE_ASPECT_RATIO) * sprite.texture.width);
+ctx.drawImage(sprite.texture, textureX, 0, 1, sprite.texture.height, i, spriteY, 1, spriteScreenSize * sprite.size);
+      }
+    }
+  });
+  particleSystem.render(ctx);
+// minimap
+  mmc.clearRect(0,0,140,140);
+  const cw = 140/mapW, ch=140/mapH;
+  for(let y=0; y<mapH; y++){
+    for(let x=0;x<mapW;x++){
+      if(map[y][x]===1){
+        mmc.fillStyle = "#888";
+mmc.fillRect(x*cw, y*ch, cw, ch);
+      } else if(map[y][x] === 2){
+        mmc.fillStyle = "#b09b8d";
+mmc.fillRect(x*cw, y*ch, cw, ch);
+      } else if(map[y][x] === 4){
+        mmc.fillStyle = "yellow";
+mmc.fillRect(x*cw, y*ch, cw, ch);
+      } else if(map[y][x] === 5){ // NUOVA LOGICA: Disegna il neon sulla minimappa
+        mmc.fillStyle = "#91ffff";
+// Colore ciano chiaro per il neon
+        mmc.fillRect(x*cw, y*ch, cw, ch);
+} else if(map[y][x] === 0){
+        mmc.fillStyle = "#333";
+        mmc.fillRect(x*cw, y*ch, cw, ch);
+}
+    }
+  }
+  gameState.keys.forEach(k => {
+    const pulse = 0.8 + 0.2 * Math.sin(Date.now()*0.01);
+    mmc.fillStyle = `rgba(255,215,0,${pulse})`;
+    const size = 4*pulse;
+    mmc.fillRect(k.x*cw - size/2, k.y*ch - size/2, size, size);
+  });
+gameState.medkits.forEach(m => {
+      const pulse = 0.8 + 0.2 * Math.sin(Date.now()*0.015);
+      mmc.fillStyle = `rgba(0,255,0,${pulse})`;
+      const size = 4 * pulse;
+      mmc.fillRect(m.x * cw - size / 2, m.y * ch - size / 2, size, size);
+  });
+gameState.energyDrinks.forEach(e => {
+      const pulse = 0.8 + 0.2 * Math.sin(Date.now()*0.015);
+      mmc.fillStyle = `rgba(0,255,255,${pulse})`;
+      const size = 4 * pulse;
+      mmc.fillRect(e.x * cw - size / 2, e.y * ch - size / 2, size, size);
+  });
+// Mostra gli zombie sulla minimappa
+  gameState.zombies.forEach(zombie => {
+    const zombiePulse = 0.7 + 0.3 * Math.sin(Date.now()*0.015);
+    mmc.fillStyle = `rgba(255,0,0,${zombiePulse})`;
+    const zombieSize = 6*zombiePulse;
+    mmc.fillRect(zombie.x*cw - zombieSize/2, zombie.y*ch - zombieSize/2, zombieSize, zombieSize);
+  });
+mmc.fillStyle = "blue";
+  mmc.fillRect(player.x*cw - 3, player.y*ch -3, 6, 6);
+}
+
+/* === EVENTI BOTTONE === */
+startButton.addEventListener("click", () => {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  gameState.currentLevel = 0;
+  startGame();
+});
+restartButton.addEventListener("click", () => {
+  gameState.currentLevel = 0;
+  startGame();
+});
+victoryRestartButton.addEventListener("click", () => {
+  gameState.currentLevel = 0;
+  startGame();
+});
+settingsButton.addEventListener("click", () => {
+  startScreen.style.display = "none";
+  settingsMenu.style.display = "flex";
+});
+closeSettingsButton.addEventListener("click", () => {
+  settingsMenu.style.display = 'none';
+  startScreen.style.display = 'flex';
+});
+
+continueButton.addEventListener("click", () => {
+  gameState.currentLevel++;
+  startGame();
+});
+/* === SALVATAGGIO E AGGIORNAMENTO IMPOSTAZIONI CON LABEL DI VALORE === */
+function saveSettings(){
+  localStorage.setItem('gameSettings', JSON.stringify(settings));
+}
+function loadSettings(){
+  const savedSettings = localStorage.getItem('gameSettings');
+  if(savedSettings){
+    settings = JSON.parse(savedSettings);
+    volumeStepsSlider.value = settings.volumeSteps;
+    volumeRexSlider.value = settings.volumeRex;
+volumeMusicSlider.value = settings.volumeMusic;
+    timeStepsSlider.value = settings.timeSteps;
+
+    volumeStepsLabel.textContent = Math.round(settings.volumeSteps * 100) + '%';
+    volumeRexLabel.textContent = Math.round(settings.volumeRex * 100) + '%';
+volumeMusicLabel.textContent = Math.round(settings.volumeMusic * 100) + '%';
+    timeStepsLabel.textContent = settings.timeSteps + ' ms';
+}
+}
+volumeStepsSlider.addEventListener("input", e => {
+  settings.volumeSteps = parseFloat(e.target.value);
+  volumeStepsLabel.textContent = Math.round(settings.volumeSteps * 100) + '%';
+  saveSettings();
+});
+volumeRexSlider.addEventListener("input", e => {
+  settings.volumeRex = parseFloat(e.target.value);
+  volumeRexLabel.textContent = Math.round(settings.volumeRex * 100) + '%';
+  saveSettings();
+});
+volumeMusicSlider.addEventListener("input", e => {
+  settings.volumeMusic = parseFloat(e.target.value);
+  volumeMusicLabel.textContent = Math.round(settings.volumeMusic * 100) + '%';
+  backgroundMusic.volume = settings.volumeMusic;
+  saveSettings();
+});
+timeStepsSlider.addEventListener("input", e => {
+  settings.timeSteps = parseInt(e.target.value);
+  timeStepsLabel.textContent = settings.timeSteps + ' ms';
+  saveSettings();
+});
+
+window.addEventListener('resize', resize);
+loadSettings();
+</script>
+</body>
+</html>
+
